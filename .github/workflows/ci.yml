@@ -46,7 +46,7 @@ jobs:
     name: Repo hygiene
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Required files exist
         shell: bash
         run: |
@@ -67,7 +67,7 @@ jobs:
     name: Secrets scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -87,7 +87,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Skip notice (no package.json yet)
         if: ${{ hashFiles('package.json') == '' }}
         run: echo "No package.json yet — build/test steps skipped (Phase 0)."
@@ -134,7 +134,7 @@ jobs:
       # قيمة اختبارية محلية للحاوية فقط وليست سرًّا حقيقيًا
       DATABASE_URL: postgresql://test:test@localhost:5432/kotastore_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Skip notice
         if: ${{ hashFiles('package.json') == '' }}
         run: echo "No package.json yet — integration tests skipped (Phase 0)."
