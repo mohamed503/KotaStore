@@ -91,7 +91,7 @@ jobs:
       - name: Skip notice (no package.json yet)
         if: ${{ hashFiles('package.json') == '' }}
         run: echo "No package.json yet — build/test steps skipped (Phase 0)."
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: ${{ hashFiles('package.json') != '' }}
       - uses: actions/setup-node@v4
         if: ${{ hashFiles('package.json') != '' }}
@@ -138,7 +138,7 @@ jobs:
       - name: Skip notice
         if: ${{ hashFiles('package.json') == '' }}
         run: echo "No package.json yet — integration tests skipped (Phase 0)."
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: ${{ hashFiles('package.json') != '' }}
       - uses: actions/setup-node@v4
         if: ${{ hashFiles('package.json') != '' }}
