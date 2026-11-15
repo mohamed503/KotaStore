@@ -1,0 +1,30 @@
+# dependencies & builds
+node_modules/
+.next/
+.open-next/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# environment & secrets (only .env.example is committed)
+.env
+.env.*
+!.env.example
+.dev.vars
+.wrangler/
+
+# database dumps & backups: NEVER commit (repo may be public)
+*.sql
+*.dump
+*.sql.gz
+*.age
+backups/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

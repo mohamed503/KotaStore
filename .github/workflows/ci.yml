@@ -1,0 +1,153 @@
+# ملاحظة: هذا الملف لم يُشغَّل على GitHub بعد — «لم يُختبر».
+# - قبل وجود package.json (المرحلة 1B) تنجح الوظائف بلا تشغيل بناء/اختبار فعلي؛ هذا مؤقت ولا يُعدّ دليلًا على أي نجاح.
+# - مستويات CI (ADR-0012 الملحق): كل PR = Linux فقط. Windows وmacOS تعملان عند الدمج في main،
+#   وليليًا، ويدويًا، وعند وسم الـPR بـ `full-matrix`. لإعادة الثلاثة لكل PR: اجعل select-matrix يُخرج الثلاثة دائمًا.
+# - الإجراءات (actions) تستخدم وسومًا مؤقتًا؛ AGENTS §3ب يطلب تثبيتها بـSHA كامل (يتولاه Dependabot/يدويًا في 1B).
+# - pnpm/action-setup يحتاج حقل packageManager في package.json (يُنشأ في 1B).
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * *'   # ليليًا (يعمل على الفرع الافتراضي فقط)
+  workflow_dispatch:      # تشغيل يدوي من تبويب Actions
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # لا نلغي تشغيل main/الليلي حين يصل دمج آخر (v4)
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  select-matrix:
+    name: Select OS matrix
+    runs-on: ubuntu-latest
+    outputs:
+      os: ${{ steps.pick.outputs.os }}
+    steps:
+      - id: pick
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          if [ "$EVENT" = "pull_request" ] && ! echo "$LABELS" | grep -q '"full-matrix"'; then
+            echo 'os=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'os=["ubuntu-latest","windows-latest","macos-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  repo-hygiene:
+    name: Repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Required files exist
+        shell: bash
+        run: |
+          missing=0
+          for f in README.md AGENTS.md SECURITY.md .gitignore .nvmrc .env.example \
+                   docs/PRD.md docs/ARCHITECTURE.md docs/ROADMAP.md docs/DATA-MODEL.md docs/ACCOUNTING-CHART.md \
+                   docs/adr/README.md .github/pull_request_template.md .github/dependabot.yml; do
+            if [ ! -f "$f" ]; then echo "::error::missing $f"; missing=1; fi
+          done
+          exit $missing
+      - name: No committed dumps or env files
+        shell: bash
+        run: |
+          bad=$(git ls-files | grep -E '(\.sql$|\.dump$|\.sql\.gz$|\.age$|(^|/)\.env($|\.))' | grep -v '^\.env\.example$' || true)
+          if [ -n "$bad" ]; then echo "::error::forbidden files committed:"; echo "$bad"; exit 1; fi
+
+  secrets-scan:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # إن كان المستودع تحت منظمة قد يلزم GITLEAKS_LICENSE
+
+  build-test:
+    name: Build & test (${{ matrix.os }})
+    needs: select-matrix
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJson(needs.select-matrix.outputs.os) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip notice (no package.json yet)
+        if: ${{ hashFiles('package.json') == '' }}
+        run: echo "No package.json yet — build/test steps skipped (Phase 0)."
+      - uses: pnpm/action-setup@v4
+        if: ${{ hashFiles('package.json') != '' }}
+      - uses: actions/setup-node@v4
+        if: ${{ hashFiles('package.json') != '' }}
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        if: ${{ hashFiles('package.json') != '' }}
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        if: ${{ hashFiles('package.json') != '' }}
+        run: pnpm lint
+      - name: Typecheck
+        if: ${{ hashFiles('package.json') != '' }}
+        run: pnpm typecheck
+      - name: Unit tests
+        if: ${{ hashFiles('package.json') != '' }}
+        run: pnpm test
+      - name: Build
+        if: ${{ hashFiles('package.json') != '' }}
+        run: pnpm build
+
+  db-integration:
+    name: DB integration (ubuntu + PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: kotastore_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # قيمة اختبارية محلية للحاوية فقط وليست سرًّا حقيقيًا
+      DATABASE_URL: postgresql://test:test@localhost:5432/kotastore_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip notice
+        if: ${{ hashFiles('package.json') == '' }}
+        run: echo "No package.json yet — integration tests skipped (Phase 0)."
+      - uses: pnpm/action-setup@v4
+        if: ${{ hashFiles('package.json') != '' }}
+      - uses: actions/setup-node@v4
+        if: ${{ hashFiles('package.json') != '' }}
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        if: ${{ hashFiles('package.json') != '' }}
+        run: pnpm install --frozen-lockfile
+      - name: Integration tests
+        if: ${{ hashFiles('package.json') != '' }}
+        run: pnpm test:integration

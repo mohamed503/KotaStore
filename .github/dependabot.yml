@@ -1,0 +1,13 @@
+# لم يُشغَّل على GitHub بعد — «لم يُختبر».
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # فعّل npm عند وجود package.json (المرحلة 1B):
+  # - package-ecosystem: npm
+  #   directory: /
+  #   schedule:
+  #     interval: weekly
+  #   open-pull-requests-limit: 5
